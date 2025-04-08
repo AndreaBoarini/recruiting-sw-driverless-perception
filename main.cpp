@@ -45,8 +45,16 @@ int main() {
     erode(treshold, treshold, kernel, Point(-1, -1), 7, MORPH_ELLIPSE);
     Canny(treshold, smoothed, 100, 200);
 
+    vector<vector<Point>> contours;
+    findContours(smoothed, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
+
+    for (size_t idx = 0; idx < contours.size(); idx++) {
+        cv::drawContours(output, contours, idx, Scalar(255, 0, 0));
+    }
+
     imshow("original", read1);
     imshow("smoothed", smoothed);
+    imshow("contourned", output);
     waitKey(0);
 
     return 0;
