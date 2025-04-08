@@ -1,0 +1,3 @@
+/Users/andreaboarini/driverless_perception/build/CMakeFiles/driverless_perception.dir
+/Users/andreaboarini/driverless_perception/build/CMakeFiles/edit_cache.dir
+/Users/andreaboarini/driverless_perception/build/CMakeFiles/rebuild_cache.dir

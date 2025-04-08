@@ -1,20 +1,52 @@
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include <iostream>
 using namespace std;
 using namespace cv;
 
+// defining boundaries for red, yellow and blue
+/*
+Scalar lowRed1(0, 50, 60);
+Scalar highRed1(20, 255, 255);
+Scalar lowRed2(170, 70, 50);
+Scalar highRed2(180, 255, 255);
+Scalar lowYellow(57, 35, 100);
+Scalar highYellow(60, 100, 100);
+Scalar lowBlue(100, 50, 50);
+Scalar highBlue(130, 255, 255);
+*/
+
+Scalar lowRed1(0, 135, 135);
+Scalar lowRed2(15, 255, 255);
+Scalar upRed1(159, 135, 80);
+Scalar upRed2(179, 255, 255);
+
 int main() {
 
-    // defining images' path name
     string imagePath1 = "/Users/andreaboarini/driverless_perception/frame_1.png";
     string imagePath2 = "/Users/andreaboarini/driverless_perception/frame_2.png";
     
-    // reading the paths
     Mat read1 = imread(imagePath1, IMREAD_COLOR);
     Mat read2 = imread(imagePath2, IMREAD_COLOR);
 
-    // displaying the images
-    imshow("display image", read1);
+    Mat gray, canny, hsv, colorTreshOutput, output = read1.clone();
+    cvtColor(read1, hsv, COLOR_BGR2HSV);
+
+    Mat treshLow, treshUp, treshold, treshBlue, smoothed;
+    Mat kernel;
+    inRange(hsv, lowRed1, lowRed2, treshLow);
+    inRange(hsv, upRed1, upRed2, treshUp);
+    //inRange(hsv, Scalar(100, 50, 50), Scalar(130, 255, 255), treshBlue);
+
+    kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    bitwise_or(treshLow, treshUp, treshold);
+    dilate(treshold, treshold, kernel, Point(-1, -1), 11, MORPH_ELLIPSE);
+    erode(treshold, treshold, kernel, Point(-1, -1), 7, MORPH_ELLIPSE);
+    Canny(treshold, smoothed, 100, 200);
+
+    imshow("original", read1);
+    imshow("smoothed", smoothed);
     waitKey(0);
 
     return 0;
