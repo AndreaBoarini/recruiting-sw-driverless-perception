@@ -41,15 +41,25 @@ int main() {
 
     kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
     bitwise_or(treshLow, treshUp, treshold);
+
     dilate(treshold, treshold, kernel, Point(-1, -1), 11, MORPH_ELLIPSE);
-    erode(treshold, treshold, kernel, Point(-1, -1), 7, MORPH_ELLIPSE);
+    erode(treshold, treshold, kernel, Point(-1, -1), 8, MORPH_ELLIPSE);
     Canny(treshold, smoothed, 100, 200);
 
     vector<vector<Point>> contours;
     findContours(smoothed, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
 
-    for (size_t idx = 0; idx < contours.size(); idx++) {
-        cv::drawContours(output, contours, idx, Scalar(255, 0, 0));
+    for(const auto& cnt : contours) {
+        vector<Point> approx;
+        Rect boundingRect = cv::boundingRect(cnt);
+        approxPolyDP(cnt, approx, 0.08*arcLength(cnt, true), true);
+        if (approx.size() == 3) {
+            int x = boundingRect.x;
+            int y = boundingRect.y;
+            int w = boundingRect.width;
+            int h = boundingRect.height;
+            cv::rectangle(output, cv::Point(x, y), cv::Point(x + w, y + h), cv::Scalar(0, 255, 0), 3);
+        }
     }
 
     imshow("original", read1);
