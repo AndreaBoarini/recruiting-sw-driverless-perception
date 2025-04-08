@@ -22,6 +22,9 @@ Scalar lowRed2(15, 255, 255);
 Scalar upRed1(159, 135, 80);
 Scalar upRed2(179, 255, 255);
 
+Scalar lowBlue(100, 100, 50);
+Scalar upBlue(130, 255, 255); 
+
 int main() {
 
     string imagePath1 = "/Users/andreaboarini/driverless_perception/frame_1.png";
@@ -37,14 +40,15 @@ int main() {
     Mat kernel;
     inRange(hsv, lowRed1, lowRed2, treshLow);
     inRange(hsv, upRed1, upRed2, treshUp);
-    //inRange(hsv, Scalar(100, 50, 50), Scalar(130, 255, 255), treshBlue);
+    inRange(hsv, lowBlue, upBlue, treshBlue);
 
     kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
     bitwise_or(treshLow, treshUp, treshold);
+    bitwise_or(treshold, treshBlue, treshold);
 
     dilate(treshold, treshold, kernel, Point(-1, -1), 11, MORPH_ELLIPSE);
     erode(treshold, treshold, kernel, Point(-1, -1), 8, MORPH_ELLIPSE);
-    Canny(treshold, smoothed, 100, 200);
+    Canny(treshold, smoothed, 30, 100, 7);
 
     vector<vector<Point>> contours;
     findContours(smoothed, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
