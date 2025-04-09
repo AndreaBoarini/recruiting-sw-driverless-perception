@@ -6,15 +6,25 @@ using namespace std;
 using namespace cv;
 
 // defining boundaries for red, yellow and blue
-Scalar lowRed1(0, 135, 135);
-Scalar lowRed2(15, 255, 255);
-Scalar upRed1(159, 135, 80);
-Scalar upRed2(179, 255, 255);
-
 Scalar lowBlue(100, 100, 50);
 Scalar upBlue(130, 255, 255);
 
-void printBoundaries(Mat& cannyMat, string label, Mat& outputMat, vector<vector<Point>>& contours) {
+Scalar lowRed1(0, 160, 160);
+Scalar highRed1(10, 255, 255);
+Scalar lowRed2(160, 160, 160);
+Scalar highRed2(179, 255, 255);
+
+Scalar lowYellow(160, 160, 160);
+Scalar highYellow(179, 255, 255);
+
+//238 151 72
+
+// defining label colours
+Scalar redLabel(0, 0, 255);
+Scalar blueLabel(255, 0, 0);
+Scalar yellowLabel(255, 215, 0);
+
+void printBoundaries(Mat& cannyMat, Scalar colorRect, Mat& outputMat, vector<vector<Point>>& contours) {
     findContours(cannyMat, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
     for(const auto& cnt : contours) {
         vector<Point> approx;
@@ -25,13 +35,15 @@ void printBoundaries(Mat& cannyMat, string label, Mat& outputMat, vector<vector<
             int y = boundingRect.y;
             int w = boundingRect.width;
             int h = boundingRect.height;
-            cv::rectangle(outputMat, cv::Point(x, y), cv::Point(x + w, y + h), cv::Scalar(0, 255, 0), 3);
+            rectangle(outputMat, Point(x, y), Point(x + w, y + h), colorRect, 2);
+            putText(outputMat, "color", Point(x, y), FONT_HERSHEY_PLAIN, 1, colorRect, 2);
         }
     }
     contours.clear();
 }
 
 void processColorMask(Mat& colorTreshold, Mat& kernel, int kSizeA, int kSizeB, int dilateIterations, int erodeIterations, int cannyAperture, Mat& outputCanny) {
+    imshow("pre-processing", colorTreshold);
     kernel = getStructuringElement(MORPH_RECT, Size(kSizeA, kSizeB));
     dilate(colorTreshold, colorTreshold, kernel, Point(-1, -1), dilateIterations, MORPH_ELLIPSE);
     erode(colorTreshold, colorTreshold, kernel, Point(-1, -1), erodeIterations, MORPH_ELLIPSE);
@@ -39,11 +51,11 @@ void processColorMask(Mat& colorTreshold, Mat& kernel, int kSizeA, int kSizeB, i
 }
 
 void extractColorMask(Mat& src, Scalar lower, Scalar higher, Mat& outputColor, Scalar lower2 = Scalar(0,0,0), Scalar higher2 = Scalar(0,0,0)) {
-    Mat hsv, secondary;
+    Mat hsv, primary, secondary;
     cvtColor(src, hsv, COLOR_BGR2HSV);
-    inRange(hsv, lower, higher, outputColor);
+    inRange(hsv, lower, higher, primary);
     inRange(hsv, lower2, higher2, secondary);
-    bitwise_or(outputColor, secondary, outputColor);
+    bitwise_or(primary, secondary, outputColor);
 }
 
 int main() {
@@ -71,14 +83,23 @@ int main() {
     bitwise_or(treshold, treshBlue, treshold);
     */
 
-    extractColorMask(read1, lowBlue, upBlue, treshold);
-
+    extractColorMask(read1, lowYellow, highYellow, treshold);
     processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
-    printBoundaries(smoothed, "prova", output, contours);
+    printBoundaries(smoothed, yellowLabel, output, contours);
 
-    imshow("original", read1);
-    imshow("smoothed", smoothed);
-    imshow("contourned", output);
+    /*
+    extractColorMask(read1, lowRed1, highRed1, treshold, lowRed2, highRed2);
+    processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
+    printBoundaries(smoothed, redLabel, output, contours);
+
+    extractColorMask(read1, lowBlue, upBlue, treshold);
+    processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
+    printBoundaries(smoothed, blueLabel, output, contours);
+    */
+
+    //imshow("original", read1);
+    //imshow("smoothed", smoothed);
+    //imshow("contourned", output);
     waitKey(0);
 
     return 0;
