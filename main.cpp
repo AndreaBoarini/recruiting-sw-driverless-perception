@@ -6,53 +6,16 @@ using namespace std;
 using namespace cv;
 
 // defining boundaries for red, yellow and blue
-/*
-Scalar lowRed1(0, 50, 60);
-Scalar highRed1(20, 255, 255);
-Scalar lowRed2(170, 70, 50);
-Scalar highRed2(180, 255, 255);
-Scalar lowYellow(57, 35, 100);
-Scalar highYellow(60, 100, 100);
-Scalar lowBlue(100, 50, 50);
-Scalar highBlue(130, 255, 255);
-*/
-
 Scalar lowRed1(0, 135, 135);
 Scalar lowRed2(15, 255, 255);
 Scalar upRed1(159, 135, 80);
 Scalar upRed2(179, 255, 255);
 
 Scalar lowBlue(100, 100, 50);
-Scalar upBlue(130, 255, 255); 
+Scalar upBlue(130, 255, 255);
 
-int main() {
-
-    string imagePath1 = "/Users/andreaboarini/driverless_perception/frame_1.png";
-    string imagePath2 = "/Users/andreaboarini/driverless_perception/frame_2.png";
-    
-    Mat read1 = imread(imagePath1, IMREAD_COLOR);
-    Mat read2 = imread(imagePath2, IMREAD_COLOR);
-
-    Mat gray, canny, hsv, colorTreshOutput, output = read1.clone();
-    cvtColor(read1, hsv, COLOR_BGR2HSV);
-
-    Mat treshLow, treshUp, treshold, treshBlue, smoothed;
-    Mat kernel;
-    inRange(hsv, lowRed1, lowRed2, treshLow);
-    inRange(hsv, upRed1, upRed2, treshUp);
-    inRange(hsv, lowBlue, upBlue, treshBlue);
-
-    kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-    bitwise_or(treshLow, treshUp, treshold);
-    bitwise_or(treshold, treshBlue, treshold);
-
-    dilate(treshold, treshold, kernel, Point(-1, -1), 11, MORPH_ELLIPSE);
-    erode(treshold, treshold, kernel, Point(-1, -1), 8, MORPH_ELLIPSE);
-    Canny(treshold, smoothed, 30, 100, 7);
-
-    vector<vector<Point>> contours;
-    findContours(smoothed, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
-
+void printBoundaries(Mat& cannyMat, string label, Mat& outputMat, vector<vector<Point>>& contours) {
+    findContours(cannyMat, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
     for(const auto& cnt : contours) {
         vector<Point> approx;
         Rect boundingRect = cv::boundingRect(cnt);
@@ -62,9 +25,56 @@ int main() {
             int y = boundingRect.y;
             int w = boundingRect.width;
             int h = boundingRect.height;
-            cv::rectangle(output, cv::Point(x, y), cv::Point(x + w, y + h), cv::Scalar(0, 255, 0), 3);
+            cv::rectangle(outputMat, cv::Point(x, y), cv::Point(x + w, y + h), cv::Scalar(0, 255, 0), 3);
         }
     }
+    contours.clear();
+}
+
+void processColorMask(Mat& colorTreshold, Mat& kernel, int kSizeA, int kSizeB, int dilateIterations, int erodeIterations, int cannyAperture, Mat& outputCanny) {
+    kernel = getStructuringElement(MORPH_RECT, Size(kSizeA, kSizeB));
+    dilate(colorTreshold, colorTreshold, kernel, Point(-1, -1), dilateIterations, MORPH_ELLIPSE);
+    erode(colorTreshold, colorTreshold, kernel, Point(-1, -1), erodeIterations, MORPH_ELLIPSE);
+    Canny(colorTreshold, outputCanny, 30, 100, cannyAperture);
+}
+
+void extractColorMask(Mat& src, Scalar lower, Scalar higher, Mat& outputColor, Scalar lower2 = Scalar(0,0,0), Scalar higher2 = Scalar(0,0,0)) {
+    Mat hsv, secondary;
+    cvtColor(src, hsv, COLOR_BGR2HSV);
+    inRange(hsv, lower, higher, outputColor);
+    inRange(hsv, lower2, higher2, secondary);
+    bitwise_or(outputColor, secondary, outputColor);
+}
+
+int main() {
+
+    string imagePath1 = "/Users/andreaboarini/driverless_perception/frame_1.png";
+    string imagePath2 = "/Users/andreaboarini/driverless_perception/frame_2.png";
+    
+    Mat read1 = imread(imagePath1, IMREAD_COLOR);
+    Mat read2 = imread(imagePath2, IMREAD_COLOR);
+
+    vector<vector<Point>> contours;
+    Mat treshold, kernel, smoothed, output = read1.clone();
+
+    /*
+    Mat hsv, colorTreshOutput, output = read1.clone();
+    cvtColor(read1, hsv, COLOR_BGR2HSV);
+
+    Mat treshLow, treshUp, treshold, treshBlue, smoothed;
+    Mat kernel;
+    inRange(hsv, lowRed1, lowRed2, treshLow);
+    inRange(hsv, upRed1, upRed2, treshUp);
+    inRange(hsv, lowBlue, upBlue, treshBlue);
+
+    bitwise_or(treshLow, treshUp, treshold);
+    bitwise_or(treshold, treshBlue, treshold);
+    */
+
+    extractColorMask(read1, lowBlue, upBlue, treshold);
+
+    processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
+    printBoundaries(smoothed, "prova", output, contours);
 
     imshow("original", read1);
     imshow("smoothed", smoothed);
