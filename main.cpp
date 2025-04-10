@@ -2,12 +2,13 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <iostream>
+#include <map>
 using namespace std;
 using namespace cv;
 
 // defining boundaries for red, yellow and blue
 Scalar lowBlue(100, 100, 50);
-Scalar upBlue(130, 255, 255);
+Scalar highBlue(130, 255, 255);
 
 Scalar lowRed1(0, 160, 160);
 Scalar highRed1(10, 255, 255);
@@ -21,6 +22,42 @@ Scalar highYellow(25, 255, 255);
 Scalar redLabel(0, 0, 255);
 Scalar blueLabel(255, 0, 0);
 Scalar yellowLabel(0, 255, 255);
+
+// defining a structure to iterate color ranges
+class RangeColor {
+public:
+    string label;
+    Scalar valueLow; // hsv coded
+    Scalar valueUp;
+    Scalar valueLow2; // always =0 if the range doesn't involve red
+    Scalar valueUp2;
+    Scalar color; // BGR coded
+
+    RangeColor(){
+        label = "";
+        valueLow = (0, 0, 0);
+        valueUp = (0, 0, 0);
+        valueLow2 = (0, 0, 0);
+        valueUp2 = (0, 0, 0);
+        color = (0, 0, 0);
+    }
+    RangeColor(string l, Scalar vL, Scalar vU, Scalar clr) {
+        label = l;
+        valueLow = vL;
+        valueUp = vU;
+        valueLow2 = (0, 0, 0);
+        valueUp2 = (0, 0, 0);
+        color = clr;
+    }
+    RangeColor(string l, Scalar vL, Scalar vU, Scalar vL2, Scalar vU2, Scalar clr) {
+        label = l;
+        valueLow = vL;
+        valueUp = vU;
+        valueLow2 = vL2;
+        valueUp2 = vU2;
+        color = clr;
+    }
+};
 
 void printBoundaries(Mat& cannyMat, Scalar colorRect, string labelName, Mat& outputMat, vector<vector<Point>>& contours) {
     findContours(cannyMat, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
@@ -57,15 +94,27 @@ void extractColorMask(Mat& src, Scalar lower, Scalar higher, Mat& outputColor, S
 
 int main() {
 
+    RangeColor red("Red", lowRed1, highRed1, lowRed2, highRed2, redLabel);
+    RangeColor yellow("Yellow", lowYellow, highYellow, yellowLabel);
+    RangeColor blue("Blue", lowBlue, highBlue, blueLabel);
+    vector<RangeColor> rc = {red, yellow, blue};
+    vector<vector<Point>> contours;
+
     string imagePath1 = "/Users/andreaboarini/driverless_perception/frame_1.png";
     string imagePath2 = "/Users/andreaboarini/driverless_perception/frame_2.png";
     
     Mat read1 = imread(imagePath1, IMREAD_COLOR);
     Mat read2 = imread(imagePath2, IMREAD_COLOR);
 
-    vector<vector<Point>> contours;
     Mat treshold, kernel, smoothed, output = read1.clone();
 
+    for(const auto& range : rc) {
+        extractColorMask(read1, range.valueLow, range.valueUp, treshold, range.valueLow2, range.valueUp2);
+        processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
+        printBoundaries(smoothed, range.color, range.label, output, contours);
+    }
+
+    /*
     extractColorMask(read1, lowYellow, highYellow, treshold);
     processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
     printBoundaries(smoothed, yellowLabel, "Yellow", output, contours);
@@ -74,9 +123,10 @@ int main() {
     processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
     printBoundaries(smoothed, redLabel, "Red", output, contours);
 
-    extractColorMask(read1, lowBlue, upBlue, treshold);
+    extractColorMask(read1, lowBlue, highBlue, treshold);
     processColorMask(treshold, kernel, 3, 3, 11, 8, 7, smoothed);
     printBoundaries(smoothed, blueLabel,"Blue", output, contours);
+    */
 
     imshow("smoothed", smoothed);
     imshow("contourned", output);
