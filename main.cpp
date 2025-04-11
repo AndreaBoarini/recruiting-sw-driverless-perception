@@ -1,6 +1,8 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/features2d.hpp>
+#include <opencv2/calib3d.hpp>
 #include <iostream>
 #include <vector>
 using namespace std;
@@ -20,6 +22,13 @@ Scalar highYellow(25, 255, 255);
 Scalar redLabel(0, 0, 255);
 Scalar blueLabel(255, 0, 0);
 Scalar yellowLabel(0, 255, 255);
+
+// defining the given matrix with camera parameters
+Mat intrinsicMatrix = (Mat_<double>(3, 3) <<
+    387.3502807617188, 0,                 317.7719116210938,
+    0,                 387.3502807617188, 242.4875946044922,
+    0,                 0,                 1
+);
 
 // defining a structure to iterate color ranges
 class RangeColor {
@@ -128,7 +137,7 @@ int assignRedConeSides(vector<Cone>& v, const Mat& input) {
             imageWidth = item.center.x + item.boundaries.width;
         }
     }
-    int centerX = (input.cols-1)/2;
+    int centerX = imageWidth/2;
     for (auto& item : v) {
         if (item.classifiedAs == "Red") {
             item.isRight = (item.center.x >= centerX);
@@ -149,28 +158,69 @@ void drawTrackBoundaries(vector<Cone>& v, const Mat& input, Mat& output) {
         }
     }
 
-    // between two same colored cones choose the one that is closer to the center and to the car at the same time
-    // this in order to cover sharp turns cases
     auto sortByProximity = [centerX](const Cone& a, const Cone& b) {
-        return (a.center.y > b.center.y && ((centerX-a.center.x) < (centerX-b.center.x)));
+        return (a.center.y > b.center.y);
     };
-    
+
     sort(rightBoundaryCones.begin(), rightBoundaryCones.end(), sortByProximity);
     sort(leftBoundaryCones.begin(), leftBoundaryCones.end(), sortByProximity);
     
     if (rightBoundaryCones.size() > 1) {
-        for (size_t i = 0; i < rightBoundaryCones.size() - 1; i++) {
+        for (int i = 0; i < rightBoundaryCones.size() - 1; i++) {
             Scalar lineColor = Scalar(0, 255, 40);
             line(output, rightBoundaryCones[i].center, rightBoundaryCones[i+1].center, lineColor, 2);
         }
     }
     
     if (leftBoundaryCones.size() > 1) {
-        for (size_t i = 0; i < leftBoundaryCones.size() - 1; i++) {
+        for (int i = 0; i < leftBoundaryCones.size() - 1; i++) {
             Scalar lineColor = Scalar(0, 255, 40);
             line(output, leftBoundaryCones[i].center, leftBoundaryCones[i+1].center, lineColor, 2);
         }
     }
+}
+// Function that implement features detection using ORB
+void featuresMatcher(const Mat& first, const Mat& second, Mat& output) {
+    Mat grayFirst, graySecond, descriptorFirst, descriptorSecond, essentialMat, mask, rotationMat, translationMat;
+    cvtColor(first, grayFirst, COLOR_BGR2GRAY);
+    cvtColor(second, graySecond, COLOR_BGR2GRAY);
+    Ptr<ORB> orb = ORB::create(10); // smart pointer to manage deletes automatically
+    vector<KeyPoint> keyPointsFirst, keyPointsSecond;
+
+    // find keypoints and compute their descriptors on the entire image
+    orb->detectAndCompute(grayFirst, noArray(), keyPointsFirst, descriptorFirst);
+    orb->detectAndCompute(graySecond, noArray(), keyPointsSecond, descriptorSecond);
+
+    // match the descriptors already computed with BruteForce
+    BFMatcher match(NORM_HAMMING);
+    vector<vector<DMatch>> knn;
+    match.knnMatch(descriptorFirst, descriptorSecond, knn, 2);
+
+    // apply the Lowe's ratio test
+    vector<DMatch> matchesFound;
+    for (int i = 0; i < knn.size(); i++) {
+        if (knn[i].size() > 1) {
+            if (knn[i][0].distance < 0.75f * knn[i][1].distance) {
+                matchesFound.push_back(knn[i][0]);
+            }
+        }
+    }
+    
+    // extract the 2D cooridnates from the matches
+    vector<Point2f> pointsFirst, pointsSecond;
+    for (int i = 0; i < matchesFound.size(); i++) {
+        pointsFirst.push_back(keyPointsFirst[matchesFound[i].queryIdx].pt);
+        pointsSecond.push_back(keyPointsSecond[matchesFound[i].trainIdx].pt);
+    }
+
+    if(pointsFirst.size() >= 5) {
+        essentialMat = findEssentialMat(pointsFirst, pointsSecond, intrinsicMatrix, RANSAC, 0.999, 1.0, mask);
+        recoverPose(essentialMat, pointsFirst, pointsSecond, intrinsicMatrix, rotationMat, translationMat, mask);
+    }
+
+    // visualization of matches
+    drawMatches(first, keyPointsFirst, second, keyPointsSecond, matchesFound, output);
+
 }
 int main() {
 
@@ -190,6 +240,7 @@ int main() {
     cout << (read1.cols - 1) << endl;
 
     Mat treshold, kernel, smoothed, output = read1.clone();
+    Mat odometry;
 
     for(const auto& range : rc) {
         extractColorMask(read1, range.valueLow, range.valueUp, treshold, range.valueLow2, range.valueUp2);
@@ -197,7 +248,7 @@ int main() {
         findBoundaries(smoothed, range.color, range.label, contours, conesFound);
     }
 
-    // sorting the cones' vector
+    // sorting the cones vector
     sort(conesFound.begin(), conesFound.end(), [](const Cone& c1, const Cone& c2) {
         return (c1.boundaries.x < c2.boundaries.x);
     });
@@ -213,9 +264,11 @@ int main() {
     conesFound.erase(toRemove, conesFound.end());
     printBoundaries(conesFound, output);
     drawTrackBoundaries(conesFound, read1, output);
+    featuresMatcher(read1, read2, odometry);
 
     imshow("smoothed", smoothed);
     imshow("contourned", output);
+    imshow("odometry", odometry);
     waitKey(0);
 
     return 0;
