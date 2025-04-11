@@ -62,15 +62,21 @@ public:
     Scalar colorClass;
     string classifiedAs;
     Rect boundaries;
+    Point center;
+    bool isRight;
     Cone() {
         classifiedAs = "";
         boundaries = Rect();
         colorClass = Scalar(255, 255, 255);
+        center = Point(0, 0);
+        isRight = false;
     }
     Cone(Rect bound, string classAs, Scalar cc) {
         classifiedAs = classAs;
         boundaries = bound;
         colorClass = cc;
+        center = Point(bound.x + bound.width/2, bound.y + bound.height/2);
+        isRight = (classAs == "Yellow" || (classAs == "Red" && center.x > 0));
     }
     ~Cone() {}
 };
@@ -114,6 +120,58 @@ void extractColorMask(Mat& src, Scalar lower, Scalar higher, Mat& outputColor, S
         outputColor = primary.clone();
     }
 }
+// Function to determine if a red cone is on the right or left side of the track
+int assignRedConeSides(vector<Cone>& v, const Mat& input) {
+    int imageWidth = 0;
+    for (const auto& item : v) {
+        if (item.center.x + item.boundaries.width > imageWidth) {
+            imageWidth = item.center.x + item.boundaries.width;
+        }
+    }
+    int centerX = (input.cols-1)/2;
+    for (auto& item : v) {
+        if (item.classifiedAs == "Red") {
+            item.isRight = (item.center.x >= centerX);
+        }
+    }
+    return centerX;
+}
+void drawTrackBoundaries(vector<Cone>& v, const Mat& input, Mat& output) {
+    vector<Cone> rightBoundaryCones;
+    vector<Cone> leftBoundaryCones;
+    int centerX = assignRedConeSides(v, input);
+    
+    for (const auto& item : v) {
+        if (item.classifiedAs == "Yellow" || (item.classifiedAs == "Red" && item.isRight)) {
+            rightBoundaryCones.push_back(item);
+        } else if (item.classifiedAs == "Blue" || (item.classifiedAs == "Red" && !item.isRight)) {
+            leftBoundaryCones.push_back(item);
+        }
+    }
+
+    // between two same colored cones choose the one that is closer to the center and to the car at the same time
+    // this in order to cover sharp turns cases
+    auto sortByProximity = [centerX](const Cone& a, const Cone& b) {
+        return (a.center.y > b.center.y && ((centerX-a.center.x) < (centerX-b.center.x)));
+    };
+    
+    sort(rightBoundaryCones.begin(), rightBoundaryCones.end(), sortByProximity);
+    sort(leftBoundaryCones.begin(), leftBoundaryCones.end(), sortByProximity);
+    
+    if (rightBoundaryCones.size() > 1) {
+        for (size_t i = 0; i < rightBoundaryCones.size() - 1; i++) {
+            Scalar lineColor = Scalar(0, 255, 40);
+            line(output, rightBoundaryCones[i].center, rightBoundaryCones[i+1].center, lineColor, 2);
+        }
+    }
+    
+    if (leftBoundaryCones.size() > 1) {
+        for (size_t i = 0; i < leftBoundaryCones.size() - 1; i++) {
+            Scalar lineColor = Scalar(0, 255, 40);
+            line(output, leftBoundaryCones[i].center, leftBoundaryCones[i+1].center, lineColor, 2);
+        }
+    }
+}
 int main() {
 
     RangeColor red("Red", lowRed1, highRed1, lowRed2, highRed2, redLabel);
@@ -129,6 +187,7 @@ int main() {
     
     Mat read1 = imread(imagePath1, IMREAD_COLOR);
     Mat read2 = imread(imagePath2, IMREAD_COLOR);
+    cout << (read1.cols - 1) << endl;
 
     Mat treshold, kernel, smoothed, output = read1.clone();
 
@@ -152,8 +211,8 @@ int main() {
     });
 
     conesFound.erase(toRemove, conesFound.end());
-   
     printBoundaries(conesFound, output);
+    drawTrackBoundaries(conesFound, read1, output);
 
     imshow("smoothed", smoothed);
     imshow("contourned", output);
